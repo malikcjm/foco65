@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 # foco65
 # Copyright (C) 2014  Piotr Wiszowaty
@@ -215,6 +215,12 @@ class RefBase:
     def __iter__(self):
         return iter([])
 
+class Variable(RefBase):
+    def __init__(self, name, label, value, text_section, data_section):
+        RefBase.__init__(self, name, label, value, text_section, data_section)
+        self.label = "var_" + label
+        self.text_output = "%s\n dta a(const),a(%s)\n" % (self.label, label)
+        self.data_output = "%s equ *\n dta a(%d)\n" % (label, value)
 
 class Constant(RefBase):
     def __init__(self, name, label, value, text_section, data_section):
@@ -224,7 +230,7 @@ class Constant(RefBase):
         self.data_output = "%s equ %s\n" % (label, self.value)
 
 
-class Variable(RefBase):
+class Value(RefBase):
     def __init__(self, name, label, size, text_section, data_section):
         RefBase.__init__(self, name, label, None, text_section, data_section)
         self.label = "var_" + label
@@ -360,10 +366,12 @@ class Forth:
             self.text_section = self.parse_section()
         elif token == "[data-section]":
             self.data_section = self.parse_section()
+        elif token == "value":
+            self.parse_value(1)
+        elif token == "2value":
+            self.parse_value(2)
         elif token == "variable":
-            self.parse_variable(1)
-        elif token == "2variable":
-            self.parse_variable(2)
+            self.parse_variable(token)
         elif token == "constant":
             self.parse_constant(token)
         elif token == "create":
@@ -533,11 +541,17 @@ class Forth:
         token = self.next()
         return token.text
 
-    def parse_variable(self, size):
+    def parse_value(self, size):
         token = self.next()
         name = token.text
         label = token.canon()
-        word = Variable(name, label, size, self.text_section, self.data_section)
+        word = Value(name, label, size, self.text_section, self.data_section)
+        self.add_word(word)
+
+    def parse_variable(self, token):
+        token = self.next()
+        num = self.pop(token)
+        word = Variable(token.text, token.canon(), num, self.text_section, self.data_section)
         self.add_word(word)
 
     def parse_constant(self, token):
@@ -550,7 +564,7 @@ class Forth:
         token = self.next()
         name = token.text
         label = token.canon()
-        word = Variable(name, label, 0, self.text_section, self.data_section)
+        word = Value(name, label, 0, self.text_section, self.data_section)
         self.add_word(word)
 
     def parse_allot(self, token):
