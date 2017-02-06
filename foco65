@@ -173,9 +173,9 @@ class Word:
         if self.used and self.section == section:
             if self.code:
                 cout = self.code.output(section)
-                return "%s\n dta a(*+2)\n%s\n" % (self.label, cout)
+                return "%s\n !word *+2\n%s\n" % (self.label, cout)
             else:
-                s = "\n".join(map(lambda l: " dta a(%s)" % l, self.thread))
+                s = "\n".join(map(lambda l: " !word %s" % l, self.thread))
                 return "%s\n%s\n\n" % (self.label, s)
         else:
             return ""
@@ -219,26 +219,26 @@ class Variable(RefBase):
     def __init__(self, name, label, value, text_section, data_section):
         RefBase.__init__(self, name, label, value, text_section, data_section)
         self.label = "var_" + label
-        self.text_output = "%s\n dta a(const),a(%s)\n" % (self.label, label)
-        self.data_output = "%s equ *\n dta a(%d)\n" % (label, value)
+        self.text_output = "%s\n !word const, %s\n" % (self.label, label)
+        self.data_output = "%s = *\n !word %d\n" % (label, value)
 
 class Constant(RefBase):
     def __init__(self, name, label, value, text_section, data_section):
         RefBase.__init__(self, name, label, value, text_section, data_section)
         self.label = "const_" + label
-        self.text_output = "%s\n dta a(const),a(%s)\n" % (self.label, label)
-        self.data_output = "%s equ %s\n" % (label, self.value)
+        self.text_output = "%s\n !word const, %s\n" % (self.label, label)
+        self.data_output = "%s = %s\n" % (label, self.value)
 
 
 class Value(RefBase):
     def __init__(self, name, label, size, text_section, data_section):
         RefBase.__init__(self, name, label, None, text_section, data_section)
         self.label = "var_" + label
-        self.text_output = "%s\n dta a(const),a(%s)\n" % (self.label, label)
+        self.text_output = "%s\n !word const, %s\n" % (self.label, label)
         if size:
-            self.data_output = "%s equ *\n org *+%d\n" % (label, 2*size)
+            self.data_output = "%s = *\n org *+%d\n" % (label, 2*size)
         else:
-            self.data_output = "%s equ *\n" % label
+            self.data_output = "%s = *\n" % label
 
 #####
 
@@ -572,11 +572,11 @@ class Forth:
         self.items.append(Code("\n org *+%d" % count, self.data_section))
 
     def parse_comma(self, token):
-        item = Code("\n dta a(%s)" % self.pop(token), self.data_section)
+        item = Code("\n !word %s" % self.pop(token), self.data_section)
         self.items.append(item)
 
     def parse_c_comma(self, token):
-        item = Code("\n dta %d" % self.pop(token), self.data_section)
+        item = Code("\n !byte %d" % self.pop(token), self.data_section)
         self.items.append(item)
 
     def parse_comma_doublequote(self, counted):
@@ -591,7 +591,7 @@ class Forth:
                     count = "%d," % len(text)
                 else:
                     count = ""
-                item = Code("\n dta %sc'%s'" % (count, text), self.data_section)
+                item = Code("\n !byte %sc'%s'" % (count, text), self.data_section)
                 self.items.append(item)
                 break
 
@@ -612,7 +612,7 @@ class Forth:
                     count = "%d," % len(text)
                 else:
                     count = ""
-                item = Code("\n dta %sd'%s'%s" % (count, text, inverse), self.data_section)
+                item = Code("\n !byte %sd'%s'%s" % (count, text, inverse), self.data_section)
                 self.items.append(item)
                 break
 
@@ -641,19 +641,19 @@ boot_text = """
 [text-section] boot
 
 [code]
-ip     equ $18
-w      equ $1A
-z      equ $1C
-cntr   equ $1E
-tmp    equ $15
-tmp2   equ $3D
-pstack equ %(pstack_bottom)s
+ip     = $84
+w      = $87
+z      = $86
+cntr   = $1E
+tmp    = $15
+tmp2   = $3D
+pstack = %(pstack_bottom)s
 
 boot
  ldx #%(pstack_size)d
- lda #<[main+2]
+ lda #<main+2
  sta ip
- lda #>[main+2]
+ lda #>main+2
  sta ip+1
  jmp next
 
@@ -677,7 +677,7 @@ enter
 ; pop ip
 ; jmp next
 exit
- dta a(*+2)
+ !word *+2
  pla
  sta ip+1
  pla
@@ -695,6 +695,7 @@ next
  iny
  lda (ip),y
  sta w+1
+
  lda #2
  clc
  adc ip
@@ -702,6 +703,7 @@ next
  lda #0
  adc ip+1
  sta ip+1
+
  ldy #0
  lda (w),y
  sta z
@@ -713,7 +715,7 @@ next
 ; push (ip)
 ; ip := ip+2
 lit
- dta a(*+2)
+ !word *+2
  ldy #1
  lda (ip),y
  dey
@@ -743,7 +745,7 @@ const
  jmp next
 
 _if
- dta a(*+2)
+ !word *+2
  lda pstack,x
  inx
  ora pstack,x
@@ -771,7 +773,7 @@ _if_t
  jmp next
 
 branch
- dta a(*+2)
+ !word *+2
  ldy #0
  lda (ip),y
  sta w
@@ -783,7 +785,7 @@ branch
  jmp next
 
 until
- dta a(*+2)
+ !word *+2
  lda pstack,x
  inx
  ora pstack,x
@@ -1197,7 +1199,7 @@ lshift_loop
  cpy #0
  beq lshift_end
  dey
- asl @
+ asl
  rol pstack+1,x
  jmp lshift_loop
 lshift_end
@@ -1948,28 +1950,187 @@ m_star_done
  sta pstack+1,x
  jmp next
 [end-code] ;
+
+: erase 0 fill ;
 """
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--sections", "-s", metavar="STR", default="init,boot,data,text")
-parser.add_argument("--pstack-bottom", "-p", metavar="ADDR", default="$600")
-parser.add_argument("--pstack-size", "-S", metavar="NUM", default=256, type=int)
-parser.add_argument("file", metavar="FILE")
-args = parser.parse_args()
+boot_text2 = """
+[text-section] boot
 
-boot_params = {"pstack_bottom": args.pstack_bottom,
-               "pstack_size": args.pstack_size & 0xff}
+[code]
+N      equ $c2
+IP     equ $ca
+W      equ $cd
+Z      equ W-1
+XSAVE  equ $d1
+pstack equ %(pstack_bottom)s
 
-with open(args.file, "rt") as f:
-    text = f.read()
+boot
+ lda #$6c
+ sta Z
 
-f = Forth(args.sections.split(","))
+ ldx #%(pstack_size)d
+ lda #<[main+2]
+ sta ip
+ lda #>[main+2]
+ sta ip+1
+ jmp next
 
-try:
-    f.parse_input(Input(boot_text % boot_params))
-    f.parse_input(Input(basewords_text))
-    f.parse_input(Input(text))
-    print f.generate_output()
-except (ParseError, StackUnderflow, StackNotEmpty) as e:
-    sys.stderr.write("error: %s\n" % str(e))
-    sys.exit(1)
+; push ip
+; ip := w+2
+; jmp next
+enter
+ lda ip
+ pha
+ lda ip+1
+ pha
+ lda #2
+ clc
+ adc w
+ sta ip
+ lda #0
+ adc w+1
+ sta ip+1
+ jmp next
+
+; pop ip
+; jmp next
+exit
+ !word *+2
+ pla
+ sta ip+1
+ pla
+ sta ip
+jmp next
+
+const
+ ldy #2
+ lda (w),y
+ pha
+ iny
+ lda (w),y
+ jmp push
+
+lit
+ lda (IP), y
+ pha
+
+ inc IP
+ sne:inc IP+1
+
+ lda (IP), y
+
+ inc IP
+ sne:inc IP+1
+
+push
+ dex
+ dex
+
+put
+ sta 1,x
+ pla
+ sta 0,x
+
+next
+ ldy #1
+ lda (IP),y
+ sta W+1
+ dey
+ lda (IP),y
+ sta W
+
+ clc
+ lda IP
+ adc #2
+ STA IP
+ scc:inc IP+1
+ jmp Z
+
+[end-code]
+"""
+
+basewords_text2 = """
+: !         ( x addr -- )
+[label] store
+[code]
+ lda pstack,x
+ inx
+ sta w
+ lda pstack,x
+ inx
+ sta w+1
+ lda pstack,x
+ inx
+ ldy #0
+ sta (w),y
+ iny
+ lda pstack,x
+ inx
+ sta (w),y
+ jmp next
+[end-code] ;
+"""
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sections", "-s", metavar="STR", default="init,boot,data,text")
+    parser.add_argument("--pstack-bottom", "-p", metavar="ADDR", default="$1")
+    parser.add_argument("--pstack-size", "-S", metavar="NUM", default=256, type=int)
+    parser.add_argument("file", metavar="FILE")
+    args = parser.parse_args()
+
+    boot_params = {"pstack_bottom": args.pstack_bottom,
+                   "pstack_size": args.pstack_size & 0xff}
+
+    with open(args.file, "rt") as f:
+        text = f.read()
+
+    f = Forth(args.sections.split(","))
+
+    try:
+        f.parse_input(Input(boot_text % boot_params))
+        f.parse_input(Input(basewords_text))
+        f.parse_input(Input(text))
+        print f.generate_output()
+    except (ParseError, StackUnderflow, StackNotEmpty) as e:
+        sys.stderr.write("error: %s\n" % str(e))
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
+
+
+import unittest
+
+
+class TestForth(unittest.TestCase):
+
+    def setUp(self):
+        boot_params = {"pstack_bottom": 0x600,
+                       "pstack_size": 256 & 0xff}
+        sections ="init,boot,data,text"
+        self.f = Forth(sections.split(","))
+
+        self.f.parse_input(Input(boot_text % boot_params))
+        self.f.parse_input(Input(basewords_text))
+
+    def test_create(self):
+
+        a = """
+[text-section] init
+
+[code]
+*=$d00
+
+jmp boot
+[end-code]
+
+[text-section] text
+20 variable ups
+
+: main 30 ups ! begin again ;
+
+"""
+        self.f.parse_input(Input(a))
+        print self.f.generate_output()
