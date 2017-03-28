@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 # foco65
 # Copyright (C) 2014  Piotr Wiszowaty
@@ -285,6 +285,7 @@ class Forth:
         self.int_prog = re.compile("-?[0-9]+")
         self.hex_prog = re.compile("\$[0-9A-Fa-f]+")
         self.state = None
+        self.inputs = []
 
     def push(self, item):
         self.stack.append(item)
@@ -354,6 +355,15 @@ class Forth:
             token = self.next()
             self.word = Word(token.text, self.text_section, label=token.canon())
             self.set_state("compile")
+        elif token == "[include]":
+            self.input.current_file_name = self.current_file_name
+            self.inputs.append(self.input)
+            self.current_file_name = self.next().replace('"', '')
+            with open(self.current_file_name, "rt") as f:
+                self.parse_input(Input(f.read()))
+            self.input = self.inputs.pop()
+            self.current_file_name = self.input.current_file_name
+
         elif token == "[code]":
             self.items.append(self.parse_code())
         elif token == "[text-section]":
@@ -1936,20 +1946,6 @@ m_star_done
 [end-code] ;
 """
 
-def resolve_includes(text):
-    i = text.find("[include]")
-    if (i > 0):
-        start = text.find('"',i+10)
-        end = text.find('"', start+1)
-        chunk1 = text[:i-1]
-        chunk2 = text[end+1:]
-        filename = text[start+1:end]
-        with open(filename, "rt") as f:
-            ntext = f.read()
-        text = resolve_includes(chunk1 + " " + ntext + " " + chunk2)
-        
-    return text
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--sections", "-s", metavar="STR", default="init,boot,data,text")
 parser.add_argument("--pstack-bottom", "-p", metavar="ADDR", default="$600")
@@ -1963,9 +1959,9 @@ boot_params = {"pstack_bottom": args.pstack_bottom,
 with open(args.file, "rt") as f:
     text = f.read()
 
-text = resolve_includes(text)
 
 f = Forth(args.sections.split(","))
+f.current_file_name = args.file
 
 try:
     f.parse_input(Input(boot_text % boot_params))
@@ -1973,5 +1969,5 @@ try:
     f.parse_input(Input(text))
     print f.generate_output()
 except (ParseError, StackUnderflow, StackNotEmpty) as e:
-    sys.stderr.write("error: %s\n" % str(e))
+    sys.stderr.write("error: %s %s\n" % (f.current_file_name, str(e)))
     sys.exit(1)
